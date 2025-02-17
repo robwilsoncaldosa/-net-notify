@@ -51,13 +51,13 @@ type Recipient = {
 
 const formSchema = z.object({
   selectedRecipients: z.array(z.string()),
-  name: z.string().min(1, "Name is required"),
+  name: z.string().min(1, "Name is required").optional(),
   phoneNumber: z.string().optional().refine((value) => {
     return !value || /^\+63\d{10}$/.test(value);
   }, "Invalid Philippine phone number"),
   dueDate: z.date({
     required_error: "Due date is required",
-  }),
+  }).optional(),
   message: z.string().min(1, "Message is required"),
   useDefaultMessage: z.boolean().default(false),
   messageTemplate: z.string().optional(),
