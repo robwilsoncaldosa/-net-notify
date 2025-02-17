@@ -31,9 +31,6 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 - **TextBee**: A service for sending SMS notifications.
 - **Shadcn**: A component library for building user interfaces.
 
-## Contributing
-
-Contributions are welcome! Please fork the repository and create a pull request with your changes.
 
 ## License
 
