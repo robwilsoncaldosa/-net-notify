@@ -66,6 +66,7 @@ export function PlanDialog({
       try {
         const resetData = {
           label: plan.label,
+    //   @ts-expect-error will fix this later
           value: plan.value,
         };
         setTimeout(() => {

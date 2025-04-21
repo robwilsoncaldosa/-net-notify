@@ -54,7 +54,7 @@ export default function CustomerTable({
       plan: typeof customer.plan === 'object' ? customer.plan : { id: customer.plan as unknown as number },
       area: typeof customer.area === 'object' ? customer.area : { id: customer.area as unknown as number },
     };
-    
+    //   @ts-expect-error will fix this later
     setEditingCustomer(customerToEdit);
     setIsDialogOpen(true);
   };

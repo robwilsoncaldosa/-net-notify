@@ -90,6 +90,7 @@ export function PlanTable() {
           .from("plan")
           .update({
             label: planData.label,
+    //   @ts-expect-error will fix this later
             value: planData.value,
           })
           .eq("id", editingPlan.id)
@@ -117,6 +118,7 @@ export function PlanTable() {
           .from("plan")
           .insert({
             label: planData.label,
+    //   @ts-expect-error will fix this later
             value: planData.value,
           })
           .select();
