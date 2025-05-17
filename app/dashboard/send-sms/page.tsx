@@ -41,8 +41,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { sendSMS } from '@/utils/send-sms';  // Update import path
 import { createClient } from "@/utils/supabase/client";
+import { sendSMS } from "@/utils/send-sms";
+
 
 type Customer = {
     id: number;
@@ -89,6 +90,9 @@ const TEMPLATE_VARIABLES = [
 ];
 
 const DEFAULT_TEMPLATE = "Hi {{name}}, your internet bill payment is due on {{dueDate}}. Kindly settle your balance before the due date to avoid service interruption. Thank you!";
+
+
+
 
 export default function MyForm() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
@@ -240,29 +244,35 @@ export default function MyForm() {
     messageForm.setValue("messageTemplate", templateField + variable);
   };
 
-  function onSubmit(values: z.infer<typeof messageFormSchema>) {
+  async function onSubmit(values: z.infer<typeof messageFormSchema>) {
     try {
       if (values.selectedRecipients.length === 0) {
         toast.error("Please select at least one recipient");
         return;
       }
 
+      // Show loading toast
+      const loadingToast = toast.loading("Sending messages...");
+
       if (values.useDefaultMessage) {
         if (!values.messageTemplate) {
-          toast.error("Please enter a message template");
+          toast.error("Please enter a message template", { id: loadingToast });
           return;
         }
         
-        values.selectedRecipients.forEach(name => {
+        // Process all messages in parallel
+        const sendPromises = values.selectedRecipients.map(async (name) => {
           const recipient = nameToRecipientMap[name];
           if (recipient && values.messageTemplate) {
             const personalizedMessage = processTemplate(values.messageTemplate, recipient);
-            sendSMS([recipient.phoneNumber], personalizedMessage);
+            return sendSMS([recipient.phoneNumber], personalizedMessage);
           }
         });
+        
+        await Promise.all(sendPromises.filter(Boolean));
       } else {
         if (!values.message) {
-          toast.error("Please enter a message");
+          toast.error("Please enter a message", { id: loadingToast });
           return;
         }
         
@@ -271,14 +281,14 @@ export default function MyForm() {
           .filter(phone => !!phone) as string[];
 
         if (phoneNumbers.length > 0) {
-          sendSMS(phoneNumbers, values.message);
+          await sendSMS(phoneNumbers, values.message);
         }
       }
 
-      toast.success("Messages sent successfully!");
+      toast.success("Messages sent successfully!", { id: loadingToast });
     } catch (error) {
       console.error("Form submission error", error);
-      toast.error("Failed to send messages. Please try again.");
+      toast.error(typeof error === 'object' && error instanceof Error ? error.message : "Failed to send messages. Please try again.");
     }
   }
 

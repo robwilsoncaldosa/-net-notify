@@ -155,7 +155,11 @@ export function CustomerDialog({
         phone_number: values.phone_number.startsWith('+') 
           ? values.phone_number 
           : `+${values.phone_number}`,
-        due_date: values.due_date,
+        due_date: new Date(Date.UTC(
+          values.due_date.getFullYear(),
+          values.due_date.getMonth(),
+          values.due_date.getDate()
+        )),
       };
       
       onSave({

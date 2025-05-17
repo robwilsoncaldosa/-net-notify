@@ -99,8 +99,8 @@ export default function CustomerTable({
           .insert({
             name: customerData.name,
             phone_number: customerData.phone_number,
-            plan: customerData.plan, // Match the field name from the form
-            area: customerData.area, // Match the field name from the form
+            plan: customerData.plan,
+            area: customerData.area, // This is causing the constraint violation
             due_date: customerData.due_date,
             payment_status: customerData.payment_status,
             account_status: customerData.account_status,

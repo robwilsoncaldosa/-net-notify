@@ -34,6 +34,11 @@ interface SmsTemplate {
     name: string;
     content: string;
     created_at: string;
+    area: number | null;
+    area_details?: {
+        id: number;
+        name: string;
+    } | null;
 }
 
 export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDialogProps) {
@@ -59,7 +64,7 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
     const fetchTemplates = async () => {
         const { data, error } = await supabase
             .from("sms_templates")
-            .select("*")
+            .select("*, area_details:area(id, name)")
             .order("created_at", { ascending: false });
 
         if (!error && data) {
@@ -71,9 +76,16 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
         setContent(prev => prev + variable);
     };
 
-    // Add area_id to your form state
     const [areaId, setAreaId] = useState<number | null>(null);
     
+    useEffect(() => {
+        if (selectedTemplate) {
+            setAreaId(selectedTemplate.area);
+        } else {
+            setAreaId(null);
+        }
+    }, [selectedTemplate]);
+
     const handleCreateTemplate = async () => {
         if (!name || !content) return;
 
@@ -82,7 +94,7 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
             .insert({ 
               name, 
               content,
-              area_id: areaId // Include area_id in the insert
+              area: areaId
             })
             .select();
 
@@ -90,6 +102,7 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
             setTemplates([data[0], ...templates]);
             setName("");
             setContent("");
+            setAreaId(null);
             setActiveTab("manage");
         }
     };
@@ -99,7 +112,11 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
 
         const { data, error } = await supabase
             .from("sms_templates")
-            .update({ name, content })
+            .update({ 
+                name, 
+                content,
+                area: areaId 
+            })
             .eq("id", selectedTemplate.id)
             .select();
 
@@ -108,6 +125,7 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
             setSelectedTemplate(null);
             setName("");
             setContent("");
+            setAreaId(null);
             setActiveTab("manage");
         }
     };
@@ -163,6 +181,24 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
                         </div>
 
                         <div className="space-y-2">
+                            <Label htmlFor="template-area">Area</Label>
+                            <Select 
+                                value={areaId?.toString()} 
+                                onValueChange={(value) => setAreaId(value === "null" ? null : parseInt(value))}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select an area" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {areas.map((area) => (
+                                        <SelectItem key={area.id} value={area.id.toString()}>
+                                            {area.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
                             <Label htmlFor="template-content">Message Content</Label>
                             <Textarea
                                 id="template-content"
@@ -204,6 +240,24 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
                             />
                         </div>
 
+                        <div className="space-y-2">
+                            <Label htmlFor="edit-template-area">Area</Label>
+                            <Select 
+                                value={areaId?.toString()} 
+                                onValueChange={(value) => setAreaId(value === "null" ? null : parseInt(value))}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select an area" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {areas.map((area) => (
+                                        <SelectItem key={area.id} value={area.id.toString()}>
+                                            {area.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="edit-template-content">Message Content</Label>
                             <Textarea
@@ -252,6 +306,19 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
                                             <p className="text-sm text-muted-foreground truncate max-w-[300px]">
                                                 {template.content}
                                             </p>
+                                            {template.area_details?.name ? (
+                                                <Badge variant="secondary" className="mt-1">
+                                                    {template.area_details.name}
+                                                </Badge>
+                                            ) : template.area ? (
+                                                <Badge variant="secondary" className="mt-1">
+                                                    Area ID: {template.area}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="mt-1">
+                                                    All Areas
+                                                </Badge>
+                                            )}
                                         </div>
                                         <div className="flex gap-2">
                                             <Button 
@@ -278,5 +345,4 @@ export function SmsTemplateDialog({ open, onOpenChange, areas }: SmsTemplateDial
             </DialogContent>
         </Dialog>
     );
-
 }

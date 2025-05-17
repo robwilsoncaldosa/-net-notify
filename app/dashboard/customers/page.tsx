@@ -2,6 +2,8 @@
 import { createClient } from "@/utils/supabase/server";
 import CustomerTable from "../_components/customer-table";
 import { Customer, Plan, Area } from "../page";
+import { DueDateChecker } from "../_components/due-date-checker";
+import { SendDueNotifications } from "../_components/send-due-notifications";
 
 export default async function CustomersPage() {
   const supabase = await createClient();
@@ -39,6 +41,8 @@ export default async function CustomersPage() {
         plans={plans || []} 
         areas={areas || []} 
       />
+      {/* <DueDateChecker/> */}
+      {/* <SendDueNotifications/> */}
     </div>
   );
 }
