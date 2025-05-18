@@ -147,55 +147,7 @@ export function NavUser({
             </div>
           </div>
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
-            <User className="mr-2 h-4 w-4" />
-            Profile
-          </DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Preferences</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuPortal>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => router.push('/dashboard/preferences/notifications')}>
-                  <Bell className="mr-2 h-4 w-4" />
-                  Notification Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push('/dashboard/preferences/appearance')}>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Appearance
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push('/dashboard/preferences/security')}>
-                  <Key className="mr-2 h-4 w-4" />
-                  Security
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuPortal>
-          </DropdownMenuSub>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push('/dashboard/account')}>
-            <BadgeCheck className="mr-2 h-4 w-4" />
-            Account
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => router.push('/dashboard/billing')}>
-            <CreditCard className="mr-2 h-4 w-4" />
-            Billing
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleResetPassword}>
-            <Key className="mr-2 h-4 w-4" />
-            Reset Password
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => router.push('/dashboard/help')}>
-          <HelpCircle className="mr-2 h-4 w-4" />
-          Help & Support
-        </DropdownMenuItem>
+       
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>
           <LogOut className="mr-2 h-4 w-4" />

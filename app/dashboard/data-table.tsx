@@ -35,11 +35,13 @@ import { useState, useEffect } from "react";
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  onRowClick?: (row: TData) => void; // Add this line
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
+  onRowClick, // Add this line
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -319,7 +321,8 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="hover:bg-muted/50 transition-colors"
+                  onClick={() => onRowClick && onRowClick(row.original)} // Add this line
+                  className={onRowClick ? "cursor-pointer hover:bg-muted" : ""} // Add this line
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell 

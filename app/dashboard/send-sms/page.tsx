@@ -149,6 +149,7 @@ export default function MyForm() {
     defaultValues: {
       name: "",
       phoneNumber: "",
+      dueDate: new Date(),
     },
   });
 
@@ -345,7 +346,7 @@ export default function MyForm() {
               control={recipientForm.control}
               name="dueDate"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem className=" hidden">
                   <FormLabel>Payment Due Date</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>

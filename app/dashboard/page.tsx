@@ -94,62 +94,7 @@ export default function DashboardPage() {
       });
     }
 
-    async function fetchRecentActivities() {
-      setIsLoading(true);
-      try {
-        // Fetch recent database changes from Supabase's audit log
-        const { data, error } = await supabase.from('audit_logs')
-          .select('*')
-          .order('timestamp', { ascending: false })
-          .limit(5);
-
-        if (error) {
-          console.error("Error fetching audit logs:", error);
-          
-          // Fallback to mock data if audit logs are not accessible
-          const mockActivities = [
-            {
-              id: '1',
-              timestamp: new Date().toISOString(),
-              action: 'INSERT',
-              schema: 'public',
-              table: 'customer',
-              record_id: '123'
-            },
-            {
-              id: '2',
-              timestamp: new Date(Date.now() - 3600000).toISOString(),
-              action: 'UPDATE',
-              schema: 'public',
-              table: 'plan',
-              record_id: '456'
-            },
-            {
-              id: '3',
-              timestamp: new Date(Date.now() - 7200000).toISOString(),
-              action: 'DELETE',
-              schema: 'public',
-              table: 'messages',
-              record_id: '789'
-            }
-          ];
-    //   @ts-expect-error will fix this later
-          setRecentActivities(mockActivities);
-          return;
-        }
-
-        if (data) {
-          setRecentActivities(data);
-        }
-      } catch (error) {
-        console.error("Error processing activities:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
     fetchCounts();
-    fetchRecentActivities();
   }, [supabase]);
 
   // Function to format the relative time (e.g., "2 hours ago")
@@ -209,7 +154,7 @@ export default function DashboardPage() {
     <div className="container mx-auto py-6 space-y-8">
       <h1 className="text-3xl font-bold">Dashboard</h1>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Link href="/dashboard/customers">
           <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -261,26 +206,10 @@ export default function DashboardPage() {
           </Card>
         </Link>
         
-        <Link href="/dashboard/send-sms">
-          <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Messages Sent
-              </CardTitle>
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{counts.messages}</div>
-              <p className="text-xs text-muted-foreground">
-                SMS notifications sent to customers
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-full">
+        <Card className="col-span-4 border-0 shadow-none">
           <CardHeader>
             <CardTitle>Overview</CardTitle>
             <CardDescription>
@@ -289,48 +218,6 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="pl-2">
             <Overview />
-          </CardContent>
-        </Card>
-        
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>
-              Latest system changes
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex justify-center items-center h-40">
-                <p className="text-muted-foreground">Loading activities...</p>
-              </div>
-            ) : recentActivities.length > 0 ? (
-              <div className="space-y-4">
-                {recentActivities.map((activity: any) => (
-                  <div key={activity.id} className="flex items-start space-x-4 border-b border-border/40 pb-3 last:border-0">
-                    <div className="mt-0.5">
-                      {getActivityIcon(activity.action, activity.table)}
-                    </div>
-                    <div className="space-y-1 flex-1">
-                      <p className="text-sm font-medium leading-none">
-                        {getActivityDescription(activity)}
-                      </p>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs text-muted-foreground">
-                          <span className="px-1.5 py-0.5 bg-muted rounded text-xs mr-2">{activity.table}</span>
-                          {activity.record_id && <span>ID: {activity.record_id}</span>}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{getRelativeTime(activity.timestamp)}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex justify-center items-center h-40">
-                <p className="text-muted-foreground">No recent activities found</p>
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>

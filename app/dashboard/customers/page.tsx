@@ -2,8 +2,9 @@
 import { createClient } from "@/utils/supabase/server";
 import CustomerTable from "../_components/customer-table";
 import { Customer, Plan, Area } from "../page";
-import { DueDateChecker } from "../_components/due-date-checker";
 import { SendDueNotifications } from "../_components/send-due-notifications";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { MousePointer } from "lucide-react";
 
 export default async function CustomersPage() {
   const supabase = await createClient();
@@ -36,13 +37,14 @@ export default async function CustomersPage() {
   return (
     <div className="container mx-auto py-6 space-y-8">
       <h1 className="text-3xl font-bold">Manage Customers</h1>
+
+      <div className="flex gap-2">
+      </div>
       <CustomerTable 
         initialCustomers={customers || []} 
         plans={plans || []} 
         areas={areas || []} 
       />
-      {/* <DueDateChecker/> */}
-      {/* <SendDueNotifications/> */}
     </div>
   );
 }
