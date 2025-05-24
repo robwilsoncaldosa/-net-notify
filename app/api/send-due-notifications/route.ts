@@ -39,12 +39,24 @@ export async function POST(request: Request): Promise<NextResponse<NotificationR
 
 // Also support GET requests for easier testing and scheduling
 export async function GET(): Promise<NextResponse<NotificationResponse>> {
-  // Call the POST handler with default parameters
-  return POST(new Request('', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({})
-  }));
+  try {
+    // Directly call the processing function instead of creating a fake Request
+    const { notifiedCustomers, suspendedCustomers, errors } = 
+      await processDueDateNotifications(3, true);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        notifiedCustomers,
+        suspendedCustomers,
+        errors,
+      },
+    });
+  } catch (error) {
+    console.error('Error in send-due-notifications GET route:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error',
+    }, { status: 500 });
+  }
 }

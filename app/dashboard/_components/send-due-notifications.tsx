@@ -24,11 +24,10 @@ export function SendDueNotifications() {
       setResult(null);
       
       const notifyResponse = await fetch('/api/send-due-notifications', {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ daysAhead: 3, checkOverdue: true })
       });
       
       const notifyData = await notifyResponse.json();
