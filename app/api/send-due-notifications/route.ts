@@ -14,7 +14,7 @@ type NotificationResponse = {
 export async function POST(request: Request): Promise<NextResponse<NotificationResponse>> {
   try {
     // Get parameters from request body (optional override for testing)
-    const { daysAhead = 3, checkOverdue = true } = await request.json().catch(() => ({}));
+    const { daysAhead = 0, checkOverdue = true } = await request.json().catch(() => ({}));
     
     // Use the shared utility function to process due date notifications
     const { notifiedCustomers, suspendedCustomers, errors } = 
@@ -40,9 +40,9 @@ export async function POST(request: Request): Promise<NextResponse<NotificationR
 // Also support GET requests for easier testing and scheduling
 export async function GET(): Promise<NextResponse<NotificationResponse>> {
   try {
-    // Directly call the processing function instead of creating a fake Request
+    // Use 0 days ahead to only process customers with due date today
     const { notifiedCustomers, suspendedCustomers, errors } = 
-      await processDueDateNotifications(3, true);
+      await processDueDateNotifications(0, true);
 
     return NextResponse.json({
       success: true,

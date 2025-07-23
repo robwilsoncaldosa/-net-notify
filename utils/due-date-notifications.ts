@@ -10,7 +10,7 @@ type NotificationResult = {
 };
 
 export async function processDueDateNotifications(
-  daysAhead = 3,
+  daysAhead = 0, // Changed from 3 to 0 - only process on due date
   checkOverdue = true
 ): Promise<NotificationResult> {
   const supabase = await createClient();
@@ -19,43 +19,24 @@ export async function processDueDateNotifications(
   const suspendedCustomers: number[] = [];
 
   try {
-    // Get current date
+    // Get current date and time
+    const now = new Date();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
     // Calculate dates for comparison
     const todayStr = today.toISOString().split('T')[0];
     
-    // Calculate future date range
-    const futureDate = new Date(today);
-    futureDate.setDate(today.getDate() + daysAhead);
-    const futureDateStr = futureDate.toISOString().split('T')[0];
-    
-    // Calculate exactly one day after due date for overdue notifications
-    const oneDayAfterDue = new Date(today);
-    oneDayAfterDue.setDate(today.getDate() - 1);
-    const oneDayAfterDueStr = oneDayAfterDue.toISOString().split('T')[0];
-    
-    console.log('Date range check:');
+    console.log('Date check:');
     console.log('Today:', todayStr);
-    console.log('Future date (today + ' + daysAhead + ' days):', futureDateStr);
-    console.log('Overdue check date:', oneDayAfterDueStr);
+    console.log('Current time:', now.toLocaleTimeString());
+    console.log('Is after 12 PM:', now.getHours() >= 12);
     
-    // Build query for date range - get customers with due dates from today to future date
-    let query = `due_date.gte.${todayStr},due_date.lte.${futureDateStr}`;
-    
-    // Add overdue check if enabled
-    if (checkOverdue) {
-      query = `or(and(due_date.gte.${todayStr},due_date.lte.${futureDateStr}),due_date.eq.${oneDayAfterDueStr})`;
-    }
-    
-    console.log('Supabase query:', query);
-    
-    // Get all customers with due dates in range
+    // Get customers with due dates today OR in the past (overdue)
     const { data: customers, error: customersError } = await supabase
       .from('customer')
       .select('id, name, phone_number, due_date, area, account_status, payment_status, plan')
-      .or(query)
+      .lte('due_date', todayStr) // Less than or equal to today (includes past dates)
       .eq('account_status', 'active');
 
     if (customersError) {
@@ -64,13 +45,13 @@ export async function processDueDateNotifications(
       return { notifiedCustomers, suspendedCustomers, errors };
     }
 
-    console.log('Customers found:', customers?.length || 0);
+    console.log('Customers found with due date today or in the past:', customers?.length || 0);
     if (customers && customers.length > 0) {
       console.log('Customer due dates:', customers.map(c => ({ name: c.name, due_date: c.due_date })));
     }
 
     if (!customers || customers.length === 0) {
-      console.log('No customers found matching criteria');
+      console.log('No customers found with due date today or overdue');
       return { notifiedCustomers, suspendedCustomers, errors };
     }
 
@@ -98,17 +79,20 @@ export async function processDueDateNotifications(
         const customerDueDate = new Date(customer.due_date);
         customerDueDate.setHours(0, 0, 0, 0);
         
-        const todayDate = new Date();
-        todayDate.setHours(0, 0, 0, 0);
+        const isOverdue = customerDueDate.getTime() < today.getTime();
+        const isDueToday = customerDueDate.getTime() === today.getTime();
+        const isAfter12PM = now.getHours() >= 12;
         
-        const oneDayAfterDueDate = new Date(todayDate);
-        oneDayAfterDueDate.setDate(todayDate.getDate() - 1);
+        console.log(`Processing customer ${customer.name}:`);
+        console.log(`- Due date: ${customer.due_date}`);
+        console.log(`- Is overdue: ${isOverdue}`);
+        console.log(`- Is due today: ${isDueToday}`);
+        console.log(`- Is after 12 PM: ${isAfter12PM}`);
         
-        console.log(`Processing customer ${customer.name} with due date ${customer.due_date}`);
-        
-        // Check if customer is exactly 1 day past due and we should check for overdue accounts
-        if (checkOverdue && customerDueDate.getTime() === oneDayAfterDueDate.getTime()) {
-          console.log(`Customer ${customer.name} is 1 day overdue, suspending account`);
+        // Check if customer should be marked as overdue
+        // This includes: past due dates OR due today and after 12 PM
+        if (checkOverdue && (isOverdue || (isDueToday && isAfter12PM))) {
+          console.log(`Marking customer ${customer.name} as overdue`);
           
           // Update account status to suspended and payment status to overdue
           const { error: updateError } = await supabase
@@ -142,19 +126,16 @@ export async function processDueDateNotifications(
               .replace(/\{\{due_date\}\}/g, new Date(customer.due_date).toLocaleDateString())
               .replace(/\{\{phone_number\}\}/g, customer.phone_number || '')
               .replace(/\{\{plan\}\}/g, planMap.get(customer.plan) || customer.plan || '')
-              .replace(/\{\{payment_status\}\}/g, customer.payment_status || '');
+              .replace(/\{\{payment_status\}\}/g, 'overdue');
               
             // Send SMS for overdue customers
             await sendSMSServer([customer.phone_number], messageContent);
             notifiedCustomers.push(customer.id);
             console.log(`Successfully sent overdue SMS to customer ${customer.id}`);
           }
-          return; // Skip further processing for suspended customers
-        }
-
-        // Check if this customer should receive a notification (due date is within range)
-        if (customerDueDate.getTime() >= todayDate.getTime() && customerDueDate.getTime() <= futureDate.getTime()) {
-          console.log(`Sending notification to ${customer.name} for upcoming due date`);
+        } else if (isDueToday && !isAfter12PM) {
+          // Send due date notification (only if due today and before 12 PM)
+          console.log(`Sending due date notification to ${customer.name}`);
           
           // Get SMS template for customer's area
           const { data: templates, error: templatesError } = await supabase
@@ -178,7 +159,9 @@ export async function processDueDateNotifications(
           // Send SMS
           await sendSMSServer([customer.phone_number], messageContent);
           notifiedCustomers.push(customer.id);
-          console.log(`Successfully sent SMS to customer ${customer.id}`);
+          console.log(`Successfully sent due date SMS to customer ${customer.id}`);
+        } else {
+          console.log(`No action needed for customer ${customer.name} at this time`);
         }
       } catch (error) {
         console.error(`Error processing customer ${customer.id}:`, error);

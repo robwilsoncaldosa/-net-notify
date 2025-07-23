@@ -13,8 +13,8 @@ type CheckDueDatesResponse = {
 
 export async function GET(): Promise<NextResponse<CheckDueDatesResponse>> {
   try {
-    // Use the shared utility function to process due date notifications
-    const { notifiedCustomers, suspendedCustomers, errors } = await processDueDateNotifications(3, true);
+    // Use 0 days ahead to only process customers with due date today
+    const { notifiedCustomers, suspendedCustomers, errors } = await processDueDateNotifications(0, true);
 
     return NextResponse.json({
       success: true,
