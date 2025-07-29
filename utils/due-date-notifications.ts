@@ -73,7 +73,7 @@ export async function processDueDateNotifications(
         
         // Handle overdue customers (past due dates only)
         if (checkOverdue && isOverdue) {
-          // Update account status to suspended and payment status to overdue
+          // Update account status to suspended and payment status to overdue FIRST
           const { error: updateError } = await supabase
             .from('customer')
             .update({ 
@@ -86,8 +86,10 @@ export async function processDueDateNotifications(
             errors.push(`Failed to suspend customer ${customer.id}: ${updateError.message}`);
           } else {
             suspendedCustomers.push(customer.id);
-            
-            // Send overdue notification
+          }
+          
+          // Try to send overdue notification (separate from database update)
+          try {
             const { data: templates, error: templatesError } = await supabase
               .from('sms_templates')
               .select('id, name, content')
@@ -96,45 +98,48 @@ export async function processDueDateNotifications(
 
             if (templatesError || !templates || templates.length === 0) {
               errors.push(`No SMS template found for customer ${customer.id} in area ${customer.area}`);
-              return;
+            } else {
+              const template = templates[0];
+              const messageContent = template.content
+                .replace(/\{\{name\}\}/g, customer.name)
+                .replace(/\{\{due_date\}\}/g, new Date(customer.due_date).toLocaleDateString())
+                .replace(/\{\{phone_number\}\}/g, customer.phone_number || '')
+                .replace(/\{\{plan\}\}/g, planMap.get(customer.plan) || customer.plan || '')
+                .replace(/\{\{payment_status\}\}/g, 'overdue');
+                
+              // Send SMS for overdue customers
+              await sendSMSServer([customer.phone_number], messageContent);
+              notifiedCustomers.push(customer.id);
             }
-
-            const template = templates[0];
-            const messageContent = template.content
-              .replace(/\{\{name\}\}/g, customer.name)
-              .replace(/\{\{due_date\}\}/g, new Date(customer.due_date).toLocaleDateString())
-              .replace(/\{\{phone_number\}\}/g, customer.phone_number || '')
-              .replace(/\{\{plan\}\}/g, planMap.get(customer.plan) || customer.plan || '')
-              .replace(/\{\{payment_status\}\}/g, 'overdue');
-              
-            // Send SMS for overdue customers
-            await sendSMSServer([customer.phone_number], messageContent);
-            notifiedCustomers.push(customer.id);
+          } catch (smsError) {
+            errors.push(`Failed to send SMS to customer ${customer.id}: ${smsError instanceof Error ? smsError.message : 'Unknown SMS error'}`);
           }
         } else if (isDueToday) {
-          // Send due date notification for customers due today
-          // Get SMS template for customer's area
-          const { data: templates, error: templatesError } = await supabase
-            .from('sms_templates')
-            .select('id, name, content')
-            .eq('area', customer.area)
-            .limit(1);
-        
-          if (templatesError || !templates || templates.length === 0) {
-            errors.push(`No SMS template found for customer ${customer.id} in area ${customer.area}`);
-            return;
+          // Try to send due date notification for customers due today
+          try {
+            const { data: templates, error: templatesError } = await supabase
+              .from('sms_templates')
+              .select('id, name, content')
+              .eq('area', customer.area)
+              .limit(1);
+          
+            if (templatesError || !templates || templates.length === 0) {
+              errors.push(`No SMS template found for customer ${customer.id} in area ${customer.area}`);
+            } else {
+              const template = templates[0];
+              const messageContent = template.content
+                .replace(/\{\{name\}\}/g, customer.name)
+                .replace(/\{\{due_date\}\}/g, new Date(customer.due_date).toLocaleDateString())
+                .replace(/\{\{phone\}\}/g, customer.phone_number || '')
+                .replace(/\{\{plan\}\}/g, planMap.get(customer.plan) || customer.plan || '');
+            
+              // Send SMS
+              await sendSMSServer([customer.phone_number], messageContent);
+              notifiedCustomers.push(customer.id);
+            }
+          } catch (smsError) {
+            errors.push(`Failed to send SMS to customer ${customer.id}: ${smsError instanceof Error ? smsError.message : 'Unknown SMS error'}`);
           }
-        
-          const template = templates[0];
-          const messageContent = template.content
-            .replace(/\{\{name\}\}/g, customer.name)
-            .replace(/\{\{due_date\}\}/g, new Date(customer.due_date).toLocaleDateString())
-            .replace(/\{\{phone\}\}/g, customer.phone_number || '')
-            .replace(/\{\{plan\}\}/g, planMap.get(customer.plan) || customer.plan || '');
-        
-          // Send SMS
-          await sendSMSServer([customer.phone_number], messageContent);
-          notifiedCustomers.push(customer.id);
         }
       } catch (error) {
         console.error(`Error processing customer ${customer.id}:`, error);
