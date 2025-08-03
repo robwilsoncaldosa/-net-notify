@@ -6,6 +6,8 @@ type SMSResponse = {
     message: string;
     smsBatchId: string;
     recipientCount: number;
+    timestamp: string;
+    executionType: string;
   };
   error?: string;
   details?: unknown;
@@ -15,6 +17,10 @@ export async function GET(): Promise<NextResponse<SMSResponse>> {
   try {
     const phoneNumber = '09914984912';
     const message = 'this is a test';
+    const timestamp = new Date().toISOString();
+    const executionType = 'cron-job';
+    
+    console.log(`[${timestamp}] Cron job triggered - Sending test SMS to ${phoneNumber}: "${message}"`);
     
     // Validate environment variables
     const BASE_URL = process.env.BASE_URL;
@@ -22,14 +28,14 @@ export async function GET(): Promise<NextResponse<SMSResponse>> {
     const API_KEY = process.env.API_KEY;
 
     if (!BASE_URL || !DEVICE_ID || !API_KEY) {
-      console.error('Missing required environment variables');
+      console.error(`[${timestamp}] Missing required environment variables`);
       return NextResponse.json({
         success: false,
         error: 'SMS service configuration error'
       }, { status: 500 });
     }
 
-    console.log(`Sending test SMS to ${phoneNumber}: "${message}"`);
+    console.log(`[${timestamp}] Sending test SMS to ${phoneNumber}: "${message}"`);
 
     const response = await fetch(
       `${BASE_URL}/gateway/devices/${DEVICE_ID}/send-sms`,
@@ -41,14 +47,14 @@ export async function GET(): Promise<NextResponse<SMSResponse>> {
         },
         body: JSON.stringify({
           recipients: [phoneNumber],
-          message: message,
+          message: `${message} - Sent at ${timestamp}`,
         }),
       }
     );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('SMS API error:', errorData);
+      console.error(`[${timestamp}] SMS API error:`, errorData);
       return NextResponse.json({
         success: false,
         error: 'Failed to send test SMS',
@@ -57,17 +63,20 @@ export async function GET(): Promise<NextResponse<SMSResponse>> {
     }
 
     const data = await response.json();
-    console.log('Test SMS sent successfully:', data);
+    console.log(`[${timestamp}] Test SMS sent successfully:`, data);
     
     return NextResponse.json({
       success: true,
       data: {
         ...data,
-        message: `Test SMS sent to ${phoneNumber}: "${message}"`
+        message: `Test SMS sent to ${phoneNumber}: "${message}"`,
+        timestamp,
+        executionType
       }
     });
   } catch (error) {
-    console.error('Error in test notification API route:', error);
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] Error in test notification API route:`, error);
     return NextResponse.json({
       success: false,
       error: 'Internal server error',
