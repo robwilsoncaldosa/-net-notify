@@ -71,8 +71,8 @@ export async function processDueDateNotifications(
         const isOverdue = customerDueDate.getTime() < today.getTime();
         const isDueToday = customerDueDate.getTime() === today.getTime();
         
-        // Handle overdue customers (past due dates only)
-        if (checkOverdue && isOverdue) {
+        // Handle overdue customers (past due dates) AND customers due today
+        if (checkOverdue && (isOverdue || isDueToday)) {
           // Update account status to suspended and payment status to overdue FIRST
           const { error: updateError } = await supabase
             .from('customer')
