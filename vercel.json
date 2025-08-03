@@ -2,6 +2,7 @@
     "$schema": "https://openapi.vercel.sh/vercel.json",
     "crons": [
         {
+            "host": "https://net-notify.vercel.app",
             "path": "/api/send-due-notifications",
             "schedule": "0 16 * * *"
         }
