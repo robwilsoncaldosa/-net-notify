@@ -68,7 +68,7 @@ export default function CustomerTable({
   const handleSave = async (customerData: Partial<Customer>) => {
     try {
       console.log('Saving customer data:', customerData);
-      
+
       // If updating a customer
       if (editingCustomer) {
         const { data, error } = await supabase
@@ -84,19 +84,19 @@ export default function CustomerTable({
           })
           .eq("id", editingCustomer.id)
           .select(`*, plan:plan(*), area:area(*)`);
-        
+
         if (error) {
           console.error('Error updating customer:', error);
           return;
         }
-        
+
         if (data && data.length > 0) {
           // Make sure we're updating with the correct structure
           setCustomers(
             customers.map((c) => (c.id === editingCustomer.id ? data[0] : c))
           );
         }
-      } 
+      }
       // If creating a new customer
       else {
         const { data, error } = await supabase
@@ -111,12 +111,12 @@ export default function CustomerTable({
             account_status: customerData.account_status,
           })
           .select(`*, plan:plan(*), area:area(*)`);
-        
+
         if (error) {
           console.error('Error creating customer:', error);
           return;
         }
-        
+
         if (data) {
           setCustomers([...customers, data[0]]);
         }
@@ -130,7 +130,7 @@ export default function CustomerTable({
   // Create a new columns definition with actions
   const tableColumns = [
     ...columns,
-   
+
   ];
   const handleRowClick = (customer: Customer) => {
     setSelectedCustomer(customer);
@@ -143,29 +143,30 @@ export default function CustomerTable({
       const currentDate = new Date(customer.due_date || new Date());
       const newDueDate = new Date(currentDate);
       newDueDate.setMonth(newDueDate.getMonth() + 1);
-      
+
       // Update the customer record
       const { data, error } = await supabase
         .from("customer")
         .update({
           payment_status: "paid",
+          account_status: "active",
           due_date: newDueDate.toISOString(),
         })
         .eq("id", customer.id)
         .select(`*, plan:plan(*), area:area(*)`);
-      
+
       if (error) {
         console.error('Error updating payment status:', error);
         return;
       }
-      
+
       if (data && data.length > 0) {
         // Update the customers state
         setCustomers(
           customers.map((c) => (c.id === customer.id ? data[0] : c))
         );
       }
-      
+
       setIsPaymentDialogOpen(false);
     } catch (error) {
       console.error('Exception in handleMarkAsPaid:', error);
@@ -193,10 +194,10 @@ export default function CustomerTable({
         <SendDueNotifications />
 
       </div>
-     
-      <DataTable 
-        columns={tableColumns} 
-        data={customers} 
+
+      <DataTable
+        columns={tableColumns}
+        data={customers}
         onRowClick={handleRowClick}
       />
 
@@ -209,12 +210,12 @@ export default function CustomerTable({
         areas={areas}
       />
 
-      <SmsTemplateDialog 
+      <SmsTemplateDialog
         open={isSmsDialogOpen}
         onOpenChange={setIsSmsDialogOpen}
         areas={areas}
       />
-      
+
       <Alert className="bg-blue-50 border-blue-200">
         <Info className="h-4 w-4 text-blue-700" />
         <AlertDescription className="text-blue-700 mt-1">

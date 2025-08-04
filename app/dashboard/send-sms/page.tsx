@@ -41,6 +41,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client";
 import { sendSMS } from "@/utils/send-sms";
 
@@ -51,7 +52,7 @@ type Customer = {
     phone_number: string;
     due_date: string;
     plan: string;
-    payment_status: string;
+    payment_status: "paid" | "unpaid" | "overdue";
     account_status: string;
   };
   
@@ -59,8 +60,10 @@ type Customer = {
     name: string;
     phoneNumber: string;
     dueDate: Date;
+    paymentStatus?: "paid" | "unpaid" | "overdue";
     isFromDB?: boolean;
   };
+
 // Separate form schema for recipient section
 const recipientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -91,8 +94,19 @@ const TEMPLATE_VARIABLES = [
 
 const DEFAULT_TEMPLATE = "Hi {{name}}, your internet bill payment is due on {{dueDate}}. Kindly settle your balance before the due date to avoid service interruption. Thank you!";
 
-
-
+// Helper function to get payment status badge color
+const getPaymentStatusColor = (status: "paid" | "unpaid" | "overdue") => {
+  switch (status) {
+    case "paid":
+      return "bg-green-100 text-green-800 border-green-200";
+    case "unpaid":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "overdue":
+      return "bg-red-100 text-red-800 border-red-200";
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-200";
+  }
+};
 
 export default function MyForm() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
@@ -120,6 +134,7 @@ export default function MyForm() {
             name: customer.name,
             phoneNumber: customer.phone_number,
             dueDate: new Date(customer.due_date),
+            paymentStatus: customer.payment_status,
             isFromDB: true
           }));
           
@@ -143,6 +158,7 @@ export default function MyForm() {
     
     fetchCustomers();
   }, []);
+
   // Separate form for recipient management
   const recipientForm = useForm<z.infer<typeof recipientFormSchema>>({
     resolver: zodResolver(recipientFormSchema),
@@ -296,8 +312,8 @@ export default function MyForm() {
   return (
     <>
     <div className="mx-auto py-10 pt-5 space-y-10">
-      {/* Recipient Management Section */}
-      <div className="p-6 rounded-lg border">
+      {/* Recipient Management Section - HIDDEN */}
+      <div className="p-6 rounded-lg border hidden">
         <h2 className="text-xl font-semibold mb-4">Add Temporary Recipient</h2>
         <p className="text-sm text-muted-foreground mb-4">
           Add recipients that aren't in your customer database. These will only be available for this session.
@@ -439,13 +455,23 @@ export default function MyForm() {
                                   key={recipient.phoneNumber}
                                   value={recipient.name}
                                 >
-                                  <div className="flex flex-col">
-                                    <div className="flex items-center">
-                                      <span className="font-medium">{recipient.name}</span>
-                                      {!recipient.isFromDB && (
-                                        <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full">
-                                          Temporary
-                                        </span>
+                                  <div className="flex flex-col w-full">
+                                    <div className="flex items-center justify-between w-full">
+                                      <div className="flex items-center">
+                                        <span className="font-medium">{recipient.name}</span>
+                                        {!recipient.isFromDB && (
+                                          <Badge variant="outline" className="ml-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">
+                                            Temporary
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {recipient.paymentStatus && (
+                                        <Badge 
+                                          variant="outline" 
+                                          className={`text-xs ${getPaymentStatusColor(recipient.paymentStatus)}`}
+                                        >
+                                          {recipient.paymentStatus.charAt(0).toUpperCase() + recipient.paymentStatus.slice(1)}
+                                        </Badge>
                                       )}
                                     </div>
                                     <span className="text-xs text-muted-foreground">
@@ -460,7 +486,7 @@ export default function MyForm() {
                       </MultiSelector>
                     </FormControl>
                     <FormDescription>
-                      Select one or more recipients for your message
+                      Select one or more recipients for your message. Payment status is shown for each customer.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
