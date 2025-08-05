@@ -26,13 +26,20 @@ import {
   MultiSelectorList,
   MultiSelectorTrigger
 } from "@/components/ui/multi-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CalendarIcon, InfoIcon } from "lucide-react";
+import { CalendarIcon, InfoIcon, Users, AlertTriangle } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -47,22 +54,29 @@ import { sendSMS } from "@/utils/send-sms";
 
 
 type Customer = {
-    id: number;
-    name: string;
-    phone_number: string;
-    due_date: string;
-    plan: string;
-    payment_status: "paid" | "unpaid" | "overdue";
-    account_status: string;
-  };
-  
-  type Recipient = {
-    name: string;
-    phoneNumber: string;
-    dueDate: Date;
-    paymentStatus?: "paid" | "unpaid" | "overdue";
-    isFromDB?: boolean;
-  };
+  id: number;
+  name: string;
+  phone_number: string;
+  due_date: string;
+  plan: string;
+  payment_status: "paid" | "unpaid" | "overdue";
+  account_status: string;
+};
+
+type Recipient = {
+  name: string;
+  phoneNumber: string;
+  dueDate: Date;
+  paymentStatus?: "paid" | "unpaid" | "overdue";
+  isFromDB?: boolean;
+};
+
+type SmsTemplate = {
+  id: number;
+  name: string;
+  content: string;
+  area: number | null;
+};
 
 // Separate form schema for recipient section
 const recipientFormSchema = z.object({
@@ -81,6 +95,7 @@ const messageFormSchema = z.object({
   message: z.string().min(1, "Message is required"),
   useDefaultMessage: z.boolean().default(false),
   messageTemplate: z.string().optional(),
+  selectedTemplate: z.string().optional(),
 });
 
 const TEMPLATE_VARIABLES = [
@@ -90,6 +105,8 @@ const TEMPLATE_VARIABLES = [
   { name: "{{reminderDate}}", description: "Date 3 days before due date" },
   { name: "{{phoneNumber}}", description: "Recipient's phone number" },
   { name: "{{daysToDue}}", description: "Number of days until due date" },
+  { name: "{{plan}}", description: "Customer's plan" },
+  { name: "{{payment_status}}", description: "Payment status" },
 ];
 
 const DEFAULT_TEMPLATE = "Hi {{name}}, your internet bill payment is due on {{dueDate}}. Kindly settle your balance before the due date to avoid service interruption. Thank you!";
@@ -114,49 +131,65 @@ export default function MyForm() {
   const [useDefaultMessage, setUseDefaultMessage] = useState(false);
   const [previewMessage, setPreviewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [templates, setTemplates] = useState<SmsTemplate[]>([]);
   const supabase = createClient();
 
-  // Fetch customers from database on component mount
+  // Fetch customers and templates from database on component mount
   useEffect(() => {
-    async function fetchCustomers() {
+    async function fetchData() {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
+        // Fetch customers
+        const { data: customersData, error: customersError } = await supabase
           .from('customer')
           .select('*');
-        
-        if (error) {
-          throw error;
+
+        if (customersError) {
+          throw customersError;
         }
-        
-        if (data) {
-          const fetchedRecipients: Recipient[] = data.map((customer: Customer) => ({
+
+        // Fetch SMS templates
+        const { data: templatesData, error: templatesError } = await supabase
+          .from('sms_templates')
+          .select('*')
+          .order('name');
+
+        if (templatesError) {
+          console.error('Error fetching templates:', templatesError);
+        }
+
+        if (customersData) {
+          const fetchedRecipients: Recipient[] = customersData.map((customer: Customer) => ({
             name: customer.name,
             phoneNumber: customer.phone_number,
             dueDate: new Date(customer.due_date),
             paymentStatus: customer.payment_status,
             isFromDB: true
           }));
-          
+
           setRecipients(fetchedRecipients);
-          
+
           // Create name to recipient mapping
           const recipientMap: Record<string, Recipient> = {};
           fetchedRecipients.forEach(recipient => {
             recipientMap[recipient.name] = recipient;
           });
-          
+
           setNameToRecipientMap(recipientMap);
         }
+
+        if (templatesData) {
+          setTemplates(templatesData);
+        }
       } catch (error) {
-        console.error('Error fetching customers:', error);
-        toast.error('Failed to load customers');
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load data');
       } finally {
         setIsLoading(false);
       }
     }
-    
-    fetchCustomers();
+
+    fetchData();
   }, []);
 
   // Separate form for recipient management
@@ -177,50 +210,82 @@ export default function MyForm() {
       message: "",
       useDefaultMessage: false,
       messageTemplate: DEFAULT_TEMPLATE,
+      selectedTemplate: "custom",
     },
   });
 
   const useDefaultMessageValue = messageForm.watch("useDefaultMessage");
   const messageTemplateValue = messageForm.watch("messageTemplate");
   const selectedRecipientsValue = messageForm.watch("selectedRecipients");
+  const selectedTemplateValue = messageForm.watch("selectedTemplate");
+
+  // Function to select all overdue customers
+  const selectAllOverdueCustomers = () => {
+    const overdueRecipients = recipients.filter(recipient =>
+      recipient.paymentStatus === "overdue"
+    );
+
+    if (overdueRecipients.length === 0) {
+      toast.info("No overdue customers found");
+      return;
+    }
+
+    const overdueNames = overdueRecipients.map(recipient => recipient.name);
+    messageForm.setValue("selectedRecipients", overdueNames);
+    toast.success(`Selected ${overdueRecipients.length} overdue customers`);
+  };
+
+  // Function to handle template selection
+  const handleTemplateSelection = (templateId: string) => {
+    if (!templateId || templateId === "custom") {
+      messageForm.setValue("messageTemplate", DEFAULT_TEMPLATE);
+      return;
+    }
+
+    const selectedTemplate = templates.find(t => t.id.toString() === templateId);
+    if (selectedTemplate) {
+      messageForm.setValue("messageTemplate", selectedTemplate.content);
+      messageForm.setValue("useDefaultMessage", true);
+    }
+  };
 
   const handleAddRecipient = async () => {
     const isValid = await recipientForm.trigger();
-    
+
     if (!isValid) {
       return;
     }
-    
+
     const name = recipientForm.getValues("name");
     const phoneNumber = recipientForm.getValues("phoneNumber");
     const dueDate = recipientForm.getValues("dueDate");
-    
+
     if (recipients.some(r => r.phoneNumber === phoneNumber)) {
       toast.error("This phone number has already been added");
       return;
     }
 
     if (name && phoneNumber && dueDate) {
-      const newRecipient: Recipient = { 
-        name, 
-        phoneNumber, 
+      const newRecipient: Recipient = {
+        name,
+        phoneNumber,
         dueDate,
         isFromDB: false // Mark as temporary recipient
       };
-      
+
       setRecipients(prev => [...prev, newRecipient]);
       setNameToRecipientMap(prev => ({ ...prev, [name]: newRecipient }));
-      
+
       const currentSelectedRecipients = messageForm.getValues("selectedRecipients");
       messageForm.setValue("selectedRecipients", [...currentSelectedRecipients, name]);
-      
+
       // Reset recipient form fields
       recipientForm.reset({
         name: "",
         phoneNumber: "",
         dueDate: undefined,
       });
-      
+
       toast.success(`Added ${name} to recipients (temporary)`);
     }
   };
@@ -236,7 +301,9 @@ export default function MyForm() {
       .replace(/{{dueDateShort}}/g, format(dueDate, "MMM d, yyyy"))
       .replace(/{{reminderDate}}/g, format(reminderDate, "MMMM d, yyyy"))
       .replace(/{{phoneNumber}}/g, recipient.phoneNumber)
-      .replace(/{{daysToDue}}/g, daysToDue.toString());
+      .replace(/{{daysToDue}}/g, daysToDue.toString())
+      .replace(/{{plan}}/g, "Internet Plan") // You might want to get actual plan data
+      .replace(/{{payment_status}}/g, recipient.paymentStatus || "unknown");
   };
 
   useEffect(() => {
@@ -276,7 +343,7 @@ export default function MyForm() {
           toast.error("Please enter a message template", { id: loadingToast });
           return;
         }
-        
+
         // Process all messages in parallel
         const sendPromises = values.selectedRecipients.map(async (name) => {
           const recipient = nameToRecipientMap[name];
@@ -285,14 +352,14 @@ export default function MyForm() {
             return sendSMS([recipient.phoneNumber], personalizedMessage);
           }
         });
-        
+
         await Promise.all(sendPromises.filter(Boolean));
       } else {
         if (!values.message) {
           toast.error("Please enter a message", { id: loadingToast });
           return;
         }
-        
+
         const phoneNumbers = values.selectedRecipients
           .map(name => nameToRecipientMap[name]?.phoneNumber)
           .filter(phone => !!phone) as string[];
@@ -309,11 +376,14 @@ export default function MyForm() {
     }
   }
 
+  // Count overdue customers
+  const overdueCount = recipients.filter(r => r.paymentStatus === "overdue").length;
+
   return (
     <>
-    <div className="mx-auto py-10 pt-5 space-y-10">
+      {/* <div className="mx-auto py-10 pt-5 space-y-10"> */}
       {/* Recipient Management Section - HIDDEN */}
-      <div className="p-6 rounded-lg border hidden">
+      {/* <div className="p-6 rounded-lg border hidden">
         <h2 className="text-xl font-semibold mb-4">Add Temporary Recipient</h2>
         <p className="text-sm text-muted-foreground mb-4">
           Add recipients that aren't in your customer database. These will only be available for this session.
@@ -410,225 +480,290 @@ export default function MyForm() {
             </Button>
           </div>
         </Form>
-      </div>
+      </div> */}
 
       {/* <Separator className="my-8" /> */}
 
-    </div>
-    <div className="mx-auto py-10 pt-5 space-y-10">
+      {/* </div > */}
+      <div className="mx-auto py-5 pt-5 space-y-10 col-span-2">
 
-     {/* Message Sending Section */}
-     <div className="p-6 rounded-lg border">
-        <h2 className="text-xl font-semibold mb-4">Send SMS Messages</h2>
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : (
-          <Form {...messageForm}>
-            <form
-              onSubmit={messageForm.handleSubmit(onSubmit)}
-              className="space-y-6"
-            >
-              <FormField
-                control={messageForm.control}
-                name="selectedRecipients"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Select Recipients</FormLabel>
-                    <FormControl>
-                      <MultiSelector
-                        values={field.value}
-                        onValuesChange={field.onChange}
-                        loop
-                        className="w-full"
-                      >
-                        <MultiSelectorTrigger>
-                          <MultiSelectorInput placeholder="Choose one or more recipients" />
-                        </MultiSelectorTrigger>
-                        <MultiSelectorContent>
-                          <MultiSelectorList>
-                            {recipients.map((recipient) => {
-                              const dueDateString = format(recipient.dueDate, "MMM d, yyyy");
-                              return (
-                                <MultiSelectorItem
-                                  key={recipient.phoneNumber}
-                                  value={recipient.name}
-                                >
-                                  <div className="flex flex-col w-full">
-                                    <div className="flex items-center justify-between w-full">
-                                      <div className="flex items-center">
-                                        <span className="font-medium">{recipient.name}</span>
-                                        {!recipient.isFromDB && (
-                                          <Badge variant="outline" className="ml-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">
-                                            Temporary
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      {recipient.paymentStatus && (
-                                        <Badge 
-                                          variant="outline" 
-                                          className={`text-xs ${getPaymentStatusColor(recipient.paymentStatus)}`}
-                                        >
-                                          {recipient.paymentStatus.charAt(0).toUpperCase() + recipient.paymentStatus.slice(1)}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">
-                                      {recipient.phoneNumber} | Due: {dueDateString}
-                                    </span>
-                                  </div>
-                                </MultiSelectorItem>
-                              );
-                            })}
-                          </MultiSelectorList>
-                        </MultiSelectorContent>
-                      </MultiSelector>
-                    </FormControl>
-                    <FormDescription>
-                      Select one or more recipients for your message. Payment status is shown for each customer.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-            <div className="rounded-md">
-              <FormField
-                control={messageForm.control}
-                name="useDefaultMessage"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                    <FormControl>
-                      <input
-                        type="checkbox"
-                        checked={field.value}
-                        onChange={field.onChange}
-                        className="h-4 w-4"
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Use Personalized Template</FormLabel>
-                      <FormDescription>
-                        Create a template with variables that will be customized for each recipient
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
+        {/* Message Sending Section */}
+        <div className="p-6 rounded-lg border">
+          <h2 className="text-xl font-semibold mb-4">Send SMS Messages</h2>
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-
-            {useDefaultMessage && (
-              <div className="space-y-4">
+          ) : (
+            <Form {...messageForm}>
+              <form
+                onSubmit={messageForm.handleSubmit(onSubmit)}
+                className="space-y-6"
+              >
                 <FormField
                   control={messageForm.control}
-                  name="messageTemplate"
+                  name="selectedRecipients"
                   render={({ field }) => (
                     <FormItem>
                       <div className="flex items-center justify-between">
-                        <FormLabel className="text-base">Message Template</FormLabel>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <InfoIcon className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent className="w-80">
-                              <p className="font-medium">Available Variables:</p>
-                              <ul className="text-sm list-disc pl-5 mt-1">
-                                {TEMPLATE_VARIABLES.map((variable) => (
-                                  <li key={variable.name}>
-                                    <span className="font-mono text-xs">{variable.name}</span>: {variable.description}
-                                  </li>
-                                ))}
-                              </ul>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <FormControl>
-                        <Textarea
-                          className="font-mono min-h-24"
-                          placeholder="Enter your message with variables like {{name}} and {{dueDate}}"
-                          {...field}
-                        />
-                      </FormControl>
-                      <div className="mt-2">
-                        <p className="text-sm font-medium mb-1">Insert variable:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {TEMPLATE_VARIABLES.map((variable) => (
+                        <FormLabel>Select Recipients</FormLabel>
+                        <div className="flex gap-2">
+                          {overdueCount > 0 && (
                             <Button
-                              key={variable.name}
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => insertTemplateVariable(variable.name)}
-                              className="text-xs"
+                              onClick={selectAllOverdueCustomers}
+                              className="text-red-600 border-red-200 hover:bg-red-50"
                             >
-                              {variable.name}
+                              <AlertTriangle className="h-4 w-4 mr-2" />
+                              Select All Overdue ({overdueCount})
                             </Button>
-                          ))}
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const allNames = recipients.map(r => r.name);
+                              messageForm.setValue("selectedRecipients", allNames);
+                              toast.success(`Selected all ${recipients.length} customers`);
+                            }}
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Select All
+                          </Button>
                         </div>
                       </div>
+                      <FormControl>
+                        <MultiSelector
+                          values={field.value}
+                          onValuesChange={field.onChange}
+                          loop
+                          className="w-full"
+                        >
+                          <MultiSelectorTrigger>
+                            <MultiSelectorInput placeholder="Choose one or more recipients" />
+                          </MultiSelectorTrigger>
+                          <MultiSelectorContent>
+                            <MultiSelectorList>
+                              {recipients.map((recipient) => {
+                                const dueDateString = format(recipient.dueDate, "MMM d, yyyy");
+                                return (
+                                  <MultiSelectorItem
+                                    key={recipient.phoneNumber}
+                                    value={recipient.name}
+                                  >
+                                    <div className="flex flex-col w-full">
+                                      <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center">
+                                          <span className="font-medium">{recipient.name}</span>
+                                          {!recipient.isFromDB && (
+                                            <Badge variant="outline" className="ml-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">
+                                              Temporary
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        {recipient.paymentStatus && (
+                                          <Badge
+                                            variant="outline"
+                                            className={`text-xs ${getPaymentStatusColor(recipient.paymentStatus)}`}
+                                          >
+                                            {recipient.paymentStatus.charAt(0).toUpperCase() + recipient.paymentStatus.slice(1)}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <span className="text-xs text-muted-foreground">
+                                        {recipient.phoneNumber} | Due: {dueDateString}
+                                      </span>
+                                    </div>
+                                  </MultiSelectorItem>
+                                );
+                              })}
+                            </MultiSelectorList>
+                          </MultiSelectorContent>
+                        </MultiSelector>
+                      </FormControl>
+                      <FormDescription>
+                        Select one or more recipients for your message. Payment status is shown for each customer.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                {selectedRecipientsValue.length > 0 && messageTemplateValue && (
-                  <div className="rounded-md  p-4 bg-muted/20">
-                    <h4 className="text-sm font-medium mb-2">Message Preview:</h4>
-                    <p className="text-sm whitespace-pre-wrap">{previewMessage}</p>
-                    <p className="text-xs mt-2 text-muted-foreground">
-                      This is how the message will appear for {selectedRecipientsValue[0]}
-                    </p>
+                {/* Template Selection */}
+                <FormField
+                  control={messageForm.control}
+                  name="selectedTemplate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Choose SMS Template</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleTemplateSelection(value);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a template or create custom message" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="custom">Custom Message</SelectItem>
+                            {templates.map((template) => (
+                              <SelectItem key={template.id} value={template.id.toString()}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormDescription>
+                        Choose from saved templates or create a custom message
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="rounded-md">
+                  <FormField
+                    control={messageForm.control}
+                    name="useDefaultMessage"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                        <FormControl>
+                          <input
+                            type="checkbox"
+                            checked={field.value}
+                            onChange={field.onChange}
+                            className="h-4 w-4"
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Use Personalized Template</FormLabel>
+                          <FormDescription>
+                            Create a template with variables that will be customized for each recipient
+                          </FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {useDefaultMessage && (
+                  <div className="space-y-4">
+                    <FormField
+                      control={messageForm.control}
+                      name="messageTemplate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <div className="flex items-center justify-between">
+                            <FormLabel className="text-base">Message Template</FormLabel>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon">
+                                    <InfoIcon className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="w-80">
+                                  <p className="font-medium">Available Variables:</p>
+                                  <ul className="text-sm list-disc pl-5 mt-1">
+                                    {TEMPLATE_VARIABLES.map((variable) => (
+                                      <li key={variable.name}>
+                                        <span className="font-mono text-xs">{variable.name}</span>: {variable.description}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <FormControl>
+                            <Textarea
+                              className="font-mono min-h-24"
+                              placeholder="Enter your message with variables like {{name}} and {{dueDate}}"
+                              {...field}
+                            />
+                          </FormControl>
+                          <div className="mt-2">
+                            <p className="text-sm font-medium mb-1">Insert variable:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {TEMPLATE_VARIABLES.map((variable) => (
+                                <Button
+                                  key={variable.name}
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => insertTemplateVariable(variable.name)}
+                                  className="text-xs"
+                                >
+                                  {variable.name}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {selectedRecipientsValue.length > 0 && messageTemplateValue && (
+                      <div className="rounded-md  p-4 bg-muted/20">
+                        <h4 className="text-sm font-medium mb-2">Message Preview:</h4>
+                        <p className="text-sm whitespace-pre-wrap">{previewMessage}</p>
+                        <p className="text-xs mt-2 text-muted-foreground">
+                          This is how the message will appear for {selectedRecipientsValue[0]}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            <FormField
-              control={messageForm.control}
-              name="message"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Message Content</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder={useDefaultMessage ? 
-                        "Message content will be generated from template" : 
-                        "Type your message here..."
-                      }
-                      {...field}
-                      disabled={useDefaultMessage}
-                      className="min-h-28"
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {useDefaultMessage ?
-                      "A personalized message will be created for each recipient based on the template" :
-                      "This exact message will be sent to all selected recipients"
-                    }
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={messageForm.control}
+                  name="message"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Message Content</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder={useDefaultMessage ?
+                            "Message content will be generated from template" :
+                            "Type your message here..."
+                          }
+                          {...field}
+                          disabled={useDefaultMessage}
+                          className="min-h-28"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {useDefaultMessage ?
+                          "A personalized message will be created for each recipient based on the template" :
+                          "This exact message will be sent to all selected recipients"
+                        }
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <Button 
-              type="submit"
-              className="w-full md:w-auto" 
-              disabled={recipients.length === 0}
-            >
-              Send Messages
-            </Button>
-          </form>
-        </Form>
-      )}
+                <Button
+                  type="submit"
+                  className="w-full md:w-auto"
+                  disabled={recipients.length === 0}
+                >
+                  Send Messages
+                </Button>
+              </form>
+            </Form>
+          )}
+        </div>
       </div>
-    </div>
     </>
-    
+
   );
 }
