@@ -81,30 +81,63 @@ export async function GET(): Promise<NextResponse<TestNotificationResponse>> {
       )
     );
 
+    // Always send a test SMS regardless of whether customer is found
+    let smsResult;
+    let messageContent;
+    let processingDetails;
+    let suspensionResult;
+
     if (!testCustomer) {
-      console.log(`❌ Test customer not found in results`);
+      console.log(`❌ Test customer not found in results - sending notification SMS anyway`);
+      
+      // Send notification SMS that no customer was found
+      const notificationMessage = `[TEST CRON] ${timestamp}: No customers found matching criteria. Target date: ${targetDateStr}. Found ${allCustomers?.length || 0} total customers with due dates <= ${targetDateStr}.`;
+      
+      try {
+        console.log(`📤 Sending notification SMS to test numbers`);
+        await sendSMSServer(testPhoneNumbers, notificationMessage);
+        console.log(`✅ Notification SMS sent successfully`);
+        smsResult = { success: true, message: 'Notification SMS sent - no customers found' };
+      } catch (smsError) {
+        console.error(`❌ Notification SMS failed:`, smsError instanceof Error ? smsError.message : 'Unknown error');
+        smsResult = { error: smsError instanceof Error ? smsError.message : 'Unknown SMS error' };
+      }
+
+      messageContent = notificationMessage;
+      processingDetails = {
+        status: '❌ NO CUSTOMER FOUND',
+        meetsDateCriteria: false,
+        totalCustomersFound: allCustomers?.length || 0,
+        testPhoneNumbers
+      };
+      suspensionResult = { message: 'No customer found, skipping suspension test' };
+
       return NextResponse.json({
-        success: false,
-        error: `Test customer not found in customers with due dates <= ${targetDateStr}`,
+        success: true,
         data: {
+          testCustomer: null,
+          messageContent,
+          smsResult,
+          suspensionResult,
           dateInfo,
+          processingDetails,
+          timestamp,
+          executionType,
           foundCustomers: allCustomers?.map(c => ({
             id: c.id,
             name: c.name,
             phone: c.phone_number,
             due_date: c.due_date
-          })),
-          timestamp,
-          executionType
+          }))
         }
-      }, { status: 404 });
+      });
     }
 
-    // Categorize the test customer
+    // Customer found - proceed with normal testing
     const daysOverdue = Math.floor((new Date(todayStr).getTime() - new Date(testCustomer.due_date).getTime()) / (1000 * 60 * 60 * 24));
     const customerStatus = daysOverdue > 0 ? '🔴 OVERDUE' : daysOverdue === 0 ? '🟡 DUE TODAY' : '🟢 DUE FUTURE';
     
-    const processingDetails = {
+    processingDetails = {
       daysOverdue: daysOverdue > 0 ? daysOverdue : 0,
       status: customerStatus,
       willBeSuspended: checkOverdue,
@@ -129,15 +162,45 @@ export async function GET(): Promise<NextResponse<TestNotificationResponse>> {
 
     if (templatesError || !templates?.length) {
       console.error(`❌ No SMS template for area: ${testCustomer.area}`);
+      
+      // Send notification SMS about missing template
+      const templateErrorMessage = `[TEST CRON] ${timestamp}: Customer found but no SMS template for area ${testCustomer.area}. Customer: ${testCustomer.name} (${testCustomer.phone_number})`;
+      
+      try {
+        console.log(`📤 Sending template error notification SMS`);
+        await sendSMSServer(testPhoneNumbers, templateErrorMessage);
+        console.log(`✅ Template error notification SMS sent`);
+        smsResult = { success: true, message: 'Template error notification sent' };
+      } catch (smsError) {
+        console.error(`❌ Template error notification SMS failed:`, smsError instanceof Error ? smsError.message : 'Unknown error');
+        smsResult = { error: smsError instanceof Error ? smsError.message : 'Unknown SMS error' };
+      }
+
       return NextResponse.json({
-        success: false,
-        error: `No SMS template found for area ${testCustomer.area}`,
-        details: templatesError?.message
-      }, { status: 404 });
+        success: true,
+        data: {
+          testCustomer: {
+            id: testCustomer.id,
+            name: testCustomer.name,
+            phone_number: testCustomer.phone_number,
+            due_date: testCustomer.due_date,
+            area: testCustomer.area,
+            account_status: testCustomer.account_status,
+            payment_status: testCustomer.payment_status
+          },
+          messageContent: templateErrorMessage,
+          smsResult,
+          suspensionResult: { message: 'Template error, skipping suspension test' },
+          dateInfo,
+          processingDetails,
+          timestamp,
+          executionType
+        }
+      });
     }
 
     // Prepare message content with template replacement
-    const messageContent = templates[0].content
+    messageContent = templates[0].content
       .replace(/\{\{name\}\}/g, testCustomer.name)
       .replace(/\{\{due_date\}\}/g, new Date(testCustomer.due_date).toLocaleDateString())
       .replace(/\{\{phone_number\}\}/g, testCustomer.phone_number || '')
@@ -146,7 +209,6 @@ export async function GET(): Promise<NextResponse<TestNotificationResponse>> {
       .replace(/\{\{payment_status\}\}/g, 'overdue');
 
     // Test SMS sending - ONLY sends to the single testCustomer found above
-    let smsResult;
     try {
       console.log(`📤 Sending SMS to ${testCustomer.phone_number}`);
       await sendSMSServer([testCustomer.phone_number], `[TEST] ${messageContent}`);
@@ -158,7 +220,6 @@ export async function GET(): Promise<NextResponse<TestNotificationResponse>> {
     }
 
     // Test customer suspension
-    let suspensionResult;
     try {
       if (checkOverdue && testCustomer.account_status === 'active') {
         console.log(`⏸️ Testing suspension for customer ${testCustomer.id}`);
@@ -232,6 +293,18 @@ export async function GET(): Promise<NextResponse<TestNotificationResponse>> {
   } catch (error) {
     const timestamp = new Date().toISOString();
     console.error(`❌ Test failed:`, error instanceof Error ? error.message : 'Unknown error');
+    
+    // Send error notification SMS
+    const testPhoneNumbers = ['+639914984912', '639914984912', '09914984912'];
+    const errorMessage = `[TEST CRON ERROR] ${timestamp}: Test notification failed - ${error instanceof Error ? error.message : 'Unknown error'}`;
+    
+    try {
+      await sendSMSServer(testPhoneNumbers, errorMessage);
+      console.log(`✅ Error notification SMS sent`);
+    } catch (smsError) {
+      console.error(`❌ Error notification SMS failed:`, smsError instanceof Error ? smsError.message : 'Unknown SMS error');
+    }
+
     return NextResponse.json({
       success: false,
       error: 'Internal server error',
