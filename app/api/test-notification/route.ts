@@ -20,7 +20,7 @@ type TestNotificationResponse = {
 
 export async function GET(): Promise<NextResponse<TestNotificationResponse>> {
   try {
-    const testPhoneNumbers = ['+639914984912', '639914984912', '09914984912'];
+    const testPhoneNumbers = ['+639914984912'];
     const timestamp = new Date().toISOString();
     const executionType = 'test-due-date-notification-with-conditions';
     
