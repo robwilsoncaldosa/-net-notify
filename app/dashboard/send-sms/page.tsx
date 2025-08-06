@@ -297,12 +297,13 @@ export default function MyForm() {
 
     return template
       .replace(/{{name}}/g, recipient.name)
+      .replace(/{{due_date}}/g, format(dueDate, "MMMM d, yyyy"))
       .replace(/{{dueDate}}/g, format(dueDate, "MMMM d, yyyy"))
       .replace(/{{dueDateShort}}/g, format(dueDate, "MMM d, yyyy"))
       .replace(/{{reminderDate}}/g, format(reminderDate, "MMMM d, yyyy"))
       .replace(/{{phoneNumber}}/g, recipient.phoneNumber)
       .replace(/{{daysToDue}}/g, daysToDue.toString())
-      .replace(/{{plan}}/g, "Internet Plan") // You might want to get actual plan data
+      .replace(/{{plan}}/g, "plan") // You might want to get actual plan data
       .replace(/{{payment_status}}/g, recipient.paymentStatus || "unknown");
   };
 
@@ -633,7 +634,7 @@ export default function MyForm() {
                     control={messageForm.control}
                     name="useDefaultMessage"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 hidden">
                         <FormControl>
                           <input
                             type="checkbox"
