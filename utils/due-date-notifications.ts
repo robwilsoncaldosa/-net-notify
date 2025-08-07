@@ -21,25 +21,23 @@ export async function processDueDateNotifications(
   const suspendedCustomers: number[] = [];
 
   try {
-    // Create target date based on daysAhead parameter
+    // Create target date based on daysAhead parameter using local timezone
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() + daysAhead);
-    targetDate.setHours(23, 59, 59, 999); // Set to end of day to include the full target date
-    const targetDateStr = targetDate.toISOString().split('T')[0];
     
-    // Also get today's date for comparison
+    // Use local date formatting instead of UTC
+    const targetDateStr = targetDate.getFullYear() + '-' + 
+      String(targetDate.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(targetDate.getDate()).padStart(2, '0');
+    
+    // Also get today's date for comparison using local timezone
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    
-    // Get the actual local date string to compare
-    const localToday = new Date();
-    const localTodayStr = localToday.getFullYear() + '-' + 
-      String(localToday.getMonth() + 1).padStart(2, '0') + '-' + 
-      String(localToday.getDate()).padStart(2, '0');
+    const todayStr = today.getFullYear() + '-' + 
+      String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(today.getDate()).padStart(2, '0');
     
     console.log('📅 Date information:');
-    console.log(`  System UTC today: ${todayStr}`);
-    console.log(`  Local today: ${localTodayStr}`);
+    console.log(`  Local today: ${todayStr}`);
     console.log(`  Target date (today + ${daysAhead} days): ${targetDateStr}`);
     console.log(`  Looking for customers with due_date <= ${targetDateStr} (includes overdue customers)`);
     
